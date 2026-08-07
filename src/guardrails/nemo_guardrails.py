@@ -21,15 +21,6 @@ NEMO_YAML_CONFIG = textwrap.dedent("""\
       - type: main
         engine: google
         model: gemini-3.1-flash-lite
-
-    rails:
-      input:
-        flows:
-          - check user message
-
-      output:
-        flows:
-          - check bot response
 """)
 
 
