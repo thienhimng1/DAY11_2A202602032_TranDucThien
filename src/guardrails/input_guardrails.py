@@ -35,20 +35,47 @@ from core.config import ALLOWED_TOPICS, BLOCKED_TOPICS
 def detect_injection(user_input: str) -> bool:
     """Detect prompt injection patterns in user input.
 
+    Canonicalizes Unicode (NFKC) and strips zero-width/invisible characters
+    before running layered regex signals. This catches obfuscated injections
+    like ``Ignore\\u200b all previous instructions`` embedded in untrusted
+    email/RAG content, while still allowing benign banking questions or
+    requests to summarize external documents.
+
     Args:
         user_input: The user's message
 
     Returns:
         True if injection detected, False otherwise
     """
+    import unicodedata
+
+    # --- Step 1: Canonicalize Unicode + strip invisible chars ---
+    ZERO_WIDTH = "\u200b\u200c\u200d\ufeff\u2060"
+    normalized = unicodedata.normalize("NFKC", user_input or "")
+    normalized = normalized.translate(str.maketrans("", "", ZERO_WIDTH))
+
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        # English injection patterns
+        r"ignore\s+(all\s+)?(previous|above|prior)\s*instructions?",
+        r"disregard\s+(all\s+)?(previous|above|prior)?\s*(instructions?|rules?|directives?)",
+        r"you\s+are\s+now\b",
+        r"system\s+prompt",
+        r"reveal\s+your\s+(instructions?|prompt|secrets?|password)",
+        r"pretend\s+(you\s+are|to\s+be)",
+        r"act\s+as\s+(a\s+|an\s+)?(unrestricted|evil|jailbroken)",
+        r"forget\s+(your\s+)?(instructions?|rules?|prompt)",
+        r"override\s+(your\s+)?(system\s+)?(prompt|instructions?)",
+        r"\bDAN\b",
+        r"show\s+(me\s+)?(your\s+)?(system\s+)?(prompt|instructions?|config)",
+        # Vietnamese injection patterns
+        r"bỏ\s+qua\s+(mọi\s+)?hướng\s+dẫn",
+        r"tiết\s+lộ\s+(mật\s+khẩu|api|system\s*prompt|thông\s*tin\s*nội\s*bộ)",
+        r"cho\s+tôi\s+(xem\s+)?(mật\s+khẩu|system\s*prompt|api\s*key)",
+        r"quên\s+(mọi\s+)?hướng\s+dẫn",
     ]
 
     for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, user_input, re.IGNORECASE):
+        if re.search(pattern, normalized, re.IGNORECASE):
             return True
     return False
 
@@ -74,12 +101,18 @@ def topic_filter(user_input: str) -> bool:
     """
     input_lower = user_input.lower()
 
-    # TODO: Implement logic:
-    # 1. If input contains any blocked topic -> return True
-    # 2. If input doesn't contain any allowed topic -> return True
-    # 3. Otherwise -> return False (allow)
+    # 1. If input contains any blocked topic -> return True (block)
+    for topic in BLOCKED_TOPICS:
+        if topic in input_lower:
+            return True
 
-    pass  # Replace with your implementation
+    # 2. If input contains any allowed banking topic -> return False (allow)
+    for topic in ALLOWED_TOPICS:
+        if topic in input_lower:
+            return False
+
+    # 3. No allowed topic found -> off-topic -> block
+    return True
 
 
 # ============================================================
@@ -132,14 +165,26 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         self.total_count += 1
         text = self._extract_text(user_message)
 
-        # TODO: Implement logic:
-        # 1. Call detect_injection(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 2. Call topic_filter(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 3. If both are False: return None (let message through)
+        # 1. Check for injection attacks
+        if detect_injection(text):
+            self.blocked_count += 1
+            return self._block_response(
+                "I cannot process that request. It appears to contain "
+                "a prompt injection attempt. I'm here to help with VinBank "
+                "banking questions only."
+            )
 
-        pass  # Replace with your implementation
+        # 2. Check for off-topic / blocked topics
+        if topic_filter(text):
+            self.blocked_count += 1
+            return self._block_response(
+                "I'm a VinBank assistant and can only help with banking-related "
+                "questions. How can I assist you with your account, transactions, "
+                "or other banking needs?"
+            )
+
+        # 3. Both checks passed — let message through
+        return None
 
 
 # ============================================================
