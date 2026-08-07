@@ -65,32 +65,41 @@ class ConfidenceRouter:
         Returns:
             RoutingDecision with routing action and metadata
         """
-        # TODO 11: Implement routing logic
-        #
-        # 1. Check if action_type is in HIGH_RISK_ACTIONS
-        #    -> If yes: always escalate (action="escalate", priority="high",
-        #       requires_human=True, reason="High-risk action: {action_type}")
-        #
-        # 2. Check confidence thresholds:
-        #    - confidence >= 0.9:
-        #      action="auto_send", priority="low",
-        #      requires_human=False, reason="High confidence"
-        #
-        #    - 0.7 <= confidence < 0.9:
-        #      action="queue_review", priority="normal",
-        #      requires_human=True, reason="Medium confidence — needs review"
-        #
-        #    - confidence < 0.7:
-        #      action="escalate", priority="high",
-        #      requires_human=True, reason="Low confidence — escalating"
+        # 1. High-risk actions ALWAYS escalate regardless of confidence
+        if action_type in HIGH_RISK_ACTIONS:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason=f"High-risk action: {action_type}",
+                priority="high",
+                requires_human=True,
+            )
 
-        return RoutingDecision(
-            action="auto_send",
-            confidence=confidence,
-            reason="TODO: implement routing logic",
-            priority="low",
-            requires_human=False,
-        )  # TODO: Replace with implementation
+        # 2. Confidence-based routing
+        if confidence >= self.HIGH_THRESHOLD:
+            return RoutingDecision(
+                action="auto_send",
+                confidence=confidence,
+                reason="High confidence",
+                priority="low",
+                requires_human=False,
+            )
+        elif confidence >= self.MEDIUM_THRESHOLD:
+            return RoutingDecision(
+                action="queue_review",
+                confidence=confidence,
+                reason="Medium confidence — needs review",
+                priority="normal",
+                requires_human=True,
+            )
+        else:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason="Low confidence — escalating",
+                priority="high",
+                requires_human=True,
+            )
 
 
 # ============================================================
@@ -111,33 +120,80 @@ class ConfidenceRouter:
 hitl_decision_points = [
     {
         "id": 1,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
-        "approval_path": "TODO: Explain approve, reject and timeout behavior",
-        "audit_fields": "TODO: List correlation ID, intent, diff and reviewer decision",
+        "name": "Large Money Transfer Approval",
+        "trigger": "transfer_money action with amount >= 50,000,000 VND or cross-border destination",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": (
+            "Transaction details: sender account, recipient account, amount, currency, "
+            "destination bank. Previous transaction history for this sender. "
+            "Risk score from fraud detection model."
+        ),
+        "example": (
+            "Customer requests transfer of 100,000,000 VND to an account at a foreign bank. "
+            "Agent drafts the transfer but pauses for human approval before execution."
+        ),
+        "approval_path": (
+            "APPROVE: Transfer proceeds with correlation ID logged. "
+            "REJECT: Transfer cancelled, customer notified with reason. "
+            "TIMEOUT (5 min): Auto-reject, fail closed. Customer asked to retry via branch."
+        ),
+        "audit_fields": (
+            "correlation_id (UUID), intent=transfer_money, proposed_amount, "
+            "proposed_destination, risk_score, reviewer_id, decision (approve/reject/timeout), "
+            "decision_timestamp, review_duration_ms"
+        ),
     },
     {
         "id": 2,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
-        "approval_path": "TODO: Explain approve, reject and timeout behavior",
-        "audit_fields": "TODO: List correlation ID, intent, diff and reviewer decision",
+        "name": "Account Closure Request",
+        "trigger": "close_account action requested by any user through the chatbot",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": (
+            "Account holder identity verification status, current balance, "
+            "pending transactions, linked services (auto-pay, cards), "
+            "recent login history (was session hijacked?)."
+        ),
+        "example": (
+            "Customer says 'I want to close my savings account ending in 4521'. "
+            "Agent validates identity, shows summary of impact (pending deposits, linked cards), "
+            "then queues for human reviewer who confirms the closure is intentional."
+        ),
+        "approval_path": (
+            "APPROVE: Account scheduled for closure after 7-day cooling period. "
+            "REJECT: Closure denied, escalate to branch manager if customer insists. "
+            "TIMEOUT (10 min): Auto-reject. Customer directed to visit branch in person."
+        ),
+        "audit_fields": (
+            "correlation_id (UUID), intent=close_account, account_id, "
+            "identity_verified (bool), balance_at_request, reviewer_id, "
+            "decision, decision_timestamp, cooling_period_end"
+        ),
     },
     {
         "id": 3,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
-        "approval_path": "TODO: Explain approve, reject and timeout behavior",
-        "audit_fields": "TODO: List correlation ID, intent, diff and reviewer decision",
+        "name": "Personal Information Update",
+        "trigger": "update_personal_info action (email, phone, address, or name change)",
+        "hitl_model": "human-as-tiebreaker",
+        "context_needed": (
+            "Current vs proposed personal info diff, identity verification score, "
+            "device fingerprint (known device?), time since last info change, "
+            "whether change was preceded by a password reset."
+        ),
+        "example": (
+            "Customer requests to change registered phone number from 0901234567 to 0987654321. "
+            "Automated system flags this because the request came from a new device. "
+            "Human reviewer checks if OTP was sent to the OLD number for confirmation."
+        ),
+        "approval_path": (
+            "APPROVE: Info updated, confirmation sent to both old and new contact. "
+            "REJECT: Change denied, security alert sent to original contact. "
+            "TIMEOUT (3 min): Auto-reject, fail closed. Customer asked to verify via branch."
+        ),
+        "audit_fields": (
+            "correlation_id (UUID), intent=update_personal_info, field_changed, "
+            "old_value_hash, new_value_hash, device_known (bool), "
+            "reviewer_id, decision, decision_timestamp"
+        ),
     },
 ]
 

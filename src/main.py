@@ -19,7 +19,7 @@ from core.config import setup_api_key
 async def part1_attacks():
     """Hạng mục B: attack unsafe agent, then try guards agent (điểm cộng)."""
     print("\n" + "=" * 60)
-    print("PART 1 / Hạng mục B: Attack Unsafe + Guards agents")
+    print("PART 1 / Hang muc B: Attack Unsafe + Guards agents")
     print("=" * 60)
 
     from agents.agent import create_unsafe_agent, test_agent
@@ -30,13 +30,13 @@ async def part1_attacks():
     unsafe_agent, unsafe_runner = create_unsafe_agent()
     await test_agent(unsafe_agent, unsafe_runner)
 
-    print("\n--- Attacks on UNSAFE agent (hạng mục B) ---")
+    print("\n--- Attacks on UNSAFE agent (Hang muc B) ---")
     unsafe_results = await run_attacks(
         unsafe_agent, unsafe_runner, target_name="unsafe"
     )
 
     # --- Guards (điểm cộng only if leaked=true here) ---
-    print("\n--- Attacks on GUARDS agent (điểm cộng nếu LEAKED) ---")
+    print("\n--- Attacks on GUARDS agent (Bonus neu LEAKED) ---")
     guards_agent, guards_runner = create_guards_agent()
     guards_results = await run_attacks(
         guards_agent, guards_runner, target_name="guards"
@@ -53,7 +53,7 @@ async def part1_attacks():
 
     bonus_leaks = sum(1 for r in guards_results if r.get("leaked"))
     print("\n" + "=" * 60)
-    print(f"Guards leaks (điểm cộng): {bonus_leaks}  → verifier replay decides tiered bonus (max +10)")
+    print(f"Guards leaks (Bonus): {bonus_leaks}  -> verifier replay decides tiered bonus (max +10)")
     print("=" * 60)
 
     return {
@@ -150,7 +150,7 @@ async def part5_assignment_suite():
     import os
 
     print("\n" + "=" * 60)
-    print("PART 5: Assignment suite → outputs/*.json")
+    print("PART 5: Assignment suite -> outputs/*.json")
     print("=" * 60)
 
     from assignment.pipeline import (
@@ -159,7 +159,7 @@ async def part5_assignment_suite():
         run_assignment_suite,
     )
 
-    student_id = os.environ.get("STUDENT_ID", "").strip() or "SE00000"
+    student_id = os.environ.get("STUDENT_ID", "").strip() or "2A202602032"
     try:
         plugins = build_production_plugins()
         audit, monitor = build_observability()
